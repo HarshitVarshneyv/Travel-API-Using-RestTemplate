@@ -1,16 +1,15 @@
 package com.myBizTravel.API.service;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.HttpStatusCode;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.client.RestTemplate;
 
 import com.myBizTravel.API.dto.ApprovalRequestPayload;
 import com.myBizTravel.API.dto.BookingPushPayload;
@@ -27,70 +26,101 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class TravelServiceImpl implements TravelService{
 	
-	@Qualifier("restClientWithHeaders")
-	private final RestClient restClientWithHeaders;
+	@Value("${mybiz.api.key}")
+	private String apiKey;
+	
+	@Value("${mybiz.client.code}")
+	private String clientCode;
+	
+	private final RestTemplate restTemplate;
+	
+	private static final String BASE_URL = "https://corpcb.makemytrip.com";
+
 	
 	@Override
 	public MyBizResponsePayload sendCreateRequestToMyBiz(TravelRequestPayload travelRequestPayload) {
 	    log.info("Sending request to MyBiz...");
 
-	    try {
-	        return restClientWithHeaders
-	            .post()
-	            .uri("/corporate/v1/create/partner/travelCardDetails")
-	            .body(travelRequestPayload)
-	            .retrieve()
-	            .onStatus(
-	                HttpStatusCode::isError,
-	                (request, response) -> {
-	                    String errorBody;
-	                    try (InputStream errStream = response.getBody()) {
-	                        errorBody = new String(errStream.readAllBytes(), StandardCharsets.UTF_8);
-	                    } catch (IOException ioException) {
-	                        errorBody = "Unable to read error body: " + ioException.getMessage();
-	                    }
-	                    HttpStatusCode status = response.getStatusCode();
-	                    log.error("Error from MyBiz API. Status: {}, Body: {}", status, errorBody);
-	                    throw new MyBizApiException(
-	                        String.format("MyBiz API returned error: status=%s, body=%s", status, errorBody)
-	                    );
-	                }
-	            )
-	            .body(MyBizResponsePayload.class);
-
-	    } catch (RestClientResponseException e) {
-	        // Handles HTTP errors like 4xx/5xx not caught above
-	        log.error("HTTP error while calling MyBiz API. Status: {}, Body: {}",
-	        		
-	                e.getResponseBodyAsString(),
-	                e);
-	        throw new MyBizApiException("HTTP error while calling MyBiz API", e);
-	    } catch (RestClientException e) {
-	        // Handles connection errors, timeouts, etc.
-	        log.error("Connection error while calling MyBiz API: {}", e.getMessage(), e);
-	        throw new MyBizApiException("Failed to call MyBiz API", e);
-	    }
+	    String url = BASE_URL + "/corporate/v1/create/partner/travelCardDetails";
+	    
+	    HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("partner-apikey", apiKey);
+        headers.set("client-code", clientCode);
+	    
+        HttpEntity<TravelRequestPayload> requestEntity = new HttpEntity<>(travelRequestPayload,headers);
+        
+        try {
+        	ResponseEntity<MyBizResponsePayload> response = restTemplate.exchange(
+        			url,
+        			HttpMethod.POST,
+        			requestEntity,
+        			MyBizResponsePayload.class
+        	);
+        	return response.getBody();
+        } catch(HttpStatusCodeException e) {
+        	String responseBody = e.getResponseBodyAsString();
+        	log.error("HTTP error while calling MyBiz API. Status:{} , Body:{}",e.getStatusCode(),responseBody);
+        	throw new MyBizApiException(
+        			String.format("MyBiz API error: Status=%s,body=%s",e.getStatusCode() , responseBody)
+        	,e);
+        }  catch (RestClientException e) {
+            // Handles timeouts, connection failures
+            log.error("Connection error while calling MyBiz API: {}", e.getMessage(), e);
+            throw new MyBizApiException("Failed to call MyBiz API", e);
+        }
+	  
 	}
-
 	@Override
 	public void processreceiveItinerary(ItineraryPushPayload itineraryPushPayload) {
 		// TODO Auto-generated method stub
-		System.out.println("Itinerary pushed: " + itineraryPushPayload);
+//		System.out.println("Itinerary pushed: " + itineraryPushPayload);
+		 log.info("Itinerary pushed: {}", itineraryPushPayload);
 	}
 	@Override
 	public ResponseEntity<String> sendApprovalToMyBiz(ApprovalRequestPayload approvalRequestPayload) {
 		// TODO Auto-generated method stub
-		String response = restClientWithHeaders
-				.put()
-				.uri("/corporate/v1/update/partner/travelCardDetails")
-				.body(approvalRequestPayload)
-				.retrieve()
-				.body(String.class);
-		return ResponseEntity.ok(response);
+//		String response = restClientWithHeaders
+//				.put()
+//				.uri("/corporate/v1/update/partner/travelCardDetails")
+//				.body(approvalRequestPayload)
+//				.retrieve()
+//				.body(String.class);
+//		return ResponseEntity.ok(response);
+		
+		String url = BASE_URL + "/corporate/v1/update/partner/travelCardDetails";
+		
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.APPLICATION_JSON);
+		headers.set("partner-apikey", apiKey);
+		headers.set("client-code", clientCode);
+		
+		HttpEntity<ApprovalRequestPayload> requestEntity = new HttpEntity<>(approvalRequestPayload,headers);
+		
+		try {
+			ResponseEntity<String> response = restTemplate.exchange(
+					url,
+					HttpMethod.PUT,
+					requestEntity,
+					String.class
+			);
+			return response;
+		} catch(HttpStatusCodeException e) {
+			String responseBody = e.getResponseBodyAsString();
+			log.error("HTTP error while sending approval to MyBiz.Status:{} , Body:{}" , e.getStatusCode(),responseBody);
+			 throw new MyBizApiException(
+	                    String.format("MyBiz API error: status=%s, body=%s", e.getStatusCode(), responseBody),
+	                    e
+	            );
+		} catch (RestClientException e) {
+            log.error("Connection error while sending approval to MyBiz: {}", e.getMessage(), e);
+            throw new MyBizApiException("Failed to send approval to MyBiz", e);
+        }
 	}
 	@Override
 	public void receiveBooking(BookingPushPayload bookingPushPayload) {
 		// TODO Auto-generated method stub
-		 System.out.println("Booking pushed: " + bookingPushPayload);
+		 //System.out.println("Booking pushed: " + bookingPushPayload);
+		 log.info("Booking pushed: {}", bookingPushPayload);
 	}
 }
