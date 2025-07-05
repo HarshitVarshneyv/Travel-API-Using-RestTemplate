@@ -2,7 +2,7 @@
 [Note : This is the project in which the main focus is calling the external api through RestTemplate of Make my trip i.e, request goes to one server to another server ].
 
 This project integrates with MakeMyTrip's **myBiz Travel Request API**, enabling seamless travel requisition, approval, and booking synchronization between a third-party platform and myBiz.
-
+ 
 ---
 
 ## 🚀 Features
